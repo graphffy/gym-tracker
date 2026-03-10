@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -60,24 +62,28 @@ public class UserService {
 
     @Transactional
     public UserDto createWithFirstWorkout(UserDto dto, boolean makeError) {
-        // 1. Создаем и сохраняем юзера
+        // 1. Создаем юзера
         User user = User.builder()
             .username(dto.getUsername())
             .email(dto.getEmail())
+            .workouts(new ArrayList<>())
             .build();
 
+        // 2. Создаем тренировку и СРАЗУ привязываем к юзеру
+        Workout firstWorkout = Workout.builder()
+            .name("First Training")
+            .workoutDate(LocalDateTime.now()) // Обязательно, если поле в БД NOT NULL
+            .user(user)
+            .build();
+
+        // Добавляем в список (Cascade сработает)
+        user.getWorkouts().add(firstWorkout);
+
+        // Сохраняем (одного save(user) достаточно из-за CascadeType.ALL)
         User savedUser = userRepository.save(user);
 
-        // 2. Добавляем ему тренировку (она сохранится автоматически благодаря Cascade)
-        Workout welcomeWorkout = Workout.builder()
-            .name("First Training")
-            .user(savedUser)
-            .build();
-        savedUser.getWorkouts().add(welcomeWorkout);
-
-        // 3. Искусственный баг
         if (makeError) {
-            throw new RuntimeException("Транзакция откатывается! Юзер не будет создан.");
+            throw new RuntimeException("Демонстрация отката транзакции");
         }
 
         return convertToDto(savedUser);
