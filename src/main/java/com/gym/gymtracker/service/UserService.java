@@ -2,6 +2,7 @@ package com.gym.gymtracker.service;
 
 import com.gym.gymtracker.dto.UserDto;
 import com.gym.gymtracker.model.User;
+import com.gym.gymtracker.model.Workout;
 import com.gym.gymtracker.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -55,6 +56,31 @@ public class UserService {
         user.setEmail(dto.getEmail());
         // save() вызывать не обязательно из-за @Transactional, но для ясности можно
         return convertToDto(userRepository.save(user));
+    }
+
+    @Transactional
+    public UserDto createWithFirstWorkout(UserDto dto, boolean makeError) {
+        // 1. Создаем и сохраняем юзера
+        User user = User.builder()
+            .username(dto.getUsername())
+            .email(dto.getEmail())
+            .build();
+
+        User savedUser = userRepository.save(user);
+
+        // 2. Добавляем ему тренировку (она сохранится автоматически благодаря Cascade)
+        Workout welcomeWorkout = Workout.builder()
+            .name("First Training")
+            .user(savedUser)
+            .build();
+        savedUser.getWorkouts().add(welcomeWorkout);
+
+        // 3. Искусственный баг
+        if (makeError) {
+            throw new RuntimeException("Транзакция откатывается! Юзер не будет создан.");
+        }
+
+        return convertToDto(savedUser);
     }
 
     // DELETE

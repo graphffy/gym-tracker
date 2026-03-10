@@ -30,6 +30,13 @@ public class UserController {
         return userService.create(userDto);
     }
 
+    @PostMapping("/transaction-test")
+    public UserDto testTransaction(
+        @RequestBody UserDto dto,
+        @RequestParam boolean error) {
+        return userService.createWithFirstWorkout(dto, error);
+    }
+
     @GetMapping
     public List<UserDto> getAllUsers() {
         return userService.findAll();

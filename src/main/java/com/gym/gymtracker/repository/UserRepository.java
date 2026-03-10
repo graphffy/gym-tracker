@@ -1,11 +1,16 @@
 package com.gym.gymtracker.repository;
 
 import com.gym.gymtracker.model.User;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
+import java.util.List;
 
-@Repository
 public interface UserRepository extends JpaRepository<User, Long> {
-    // Метод для @RequestParam (поиск по имени)
+
+    // Решаем N+1: одним запросом тянем юзеров и их тренировки
+    @Override
+    @EntityGraph(attributePaths = {"workouts"})
+    List<User> findAll();
+
     User findByUsername(String username);
 }
