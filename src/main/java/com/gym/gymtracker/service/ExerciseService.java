@@ -1,6 +1,7 @@
 package com.gym.gymtracker.service;
 
 import com.gym.gymtracker.dto.ExerciseDto;
+import com.gym.gymtracker.mapper.ExerciseMapper;
 import com.gym.gymtracker.model.Category;
 import com.gym.gymtracker.model.Exercise;
 import com.gym.gymtracker.repository.CategoryRepository;
@@ -12,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -20,18 +20,24 @@ public class ExerciseService {
 
     private final ExerciseRepository exerciseRepository;
     private final CategoryRepository categoryRepository;
+    private final ExerciseMapper exerciseMapper;
 
-    public List<ExerciseDto> getAll() {
-        return exerciseRepository.findAll().stream()
-            .map(this::mapToDto)
-            .collect(Collectors.toList());
+    @Transactional(readOnly = true)
+    public List<ExerciseDto> findAll() {
+        return exerciseMapper.toDtoList(exerciseRepository.findAll());
+    }
+
+    @Transactional(readOnly = true)
+    public ExerciseDto findById(Long id) {
+        return exerciseRepository.findById(id)
+            .map(exerciseMapper::toDto)
+            .orElseThrow(() -> new RuntimeException("Exercise not found"));
     }
 
     @Transactional
     public ExerciseDto create(ExerciseDto dto) {
-        Set<Category> categories = new HashSet<>(
-            categoryRepository.findAllById(dto.getCategoryIds())
-        );
+        // Находим категории по ID из DTO
+        Set<Category> categories = new HashSet<>(categoryRepository.findAllById(dto.getCategoryIds()));
 
         Exercise exercise = Exercise.builder()
             .name(dto.getName())
@@ -39,17 +45,28 @@ public class ExerciseService {
             .categories(categories)
             .build();
 
-        return mapToDto(exerciseRepository.save(exercise));
+        return exerciseMapper.toDto(exerciseRepository.save(exercise));
     }
 
-    private ExerciseDto mapToDto(Exercise exercise) {
-        return ExerciseDto.builder()
-            .id(exercise.getId())
-            .name(exercise.getName())
-            .description(exercise.getDescription())
-            .categoryIds(exercise.getCategories().stream()
-                .map(Category::getId)
-                .collect(Collectors.toSet()))
-            .build();
+    @Transactional
+    public ExerciseDto update(Long id, ExerciseDto dto) {
+        Exercise existingExercise = exerciseRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Exercise not found"));
+
+        existingExercise.setName(dto.getName());
+        existingExercise.setDescription(dto.getDescription());
+
+        // Обновляем связи Many-to-Many
+        if (dto.getCategoryIds() != null) {
+            Set<Category> categories = new HashSet<>(categoryRepository.findAllById(dto.getCategoryIds()));
+            existingExercise.setCategories(categories);
+        }
+
+        return exerciseMapper.toDto(exerciseRepository.save(existingExercise));
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        exerciseRepository.deleteById(id);
     }
 }

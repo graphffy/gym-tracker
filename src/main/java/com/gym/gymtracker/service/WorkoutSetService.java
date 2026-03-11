@@ -1,6 +1,7 @@
 package com.gym.gymtracker.service;
 
 import com.gym.gymtracker.dto.WorkoutSetDto;
+import com.gym.gymtracker.mapper.WorkoutSetMapper;
 import com.gym.gymtracker.model.Exercise;
 import com.gym.gymtracker.model.Workout;
 import com.gym.gymtracker.model.WorkoutSet;
@@ -12,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -21,6 +21,19 @@ public class WorkoutSetService {
     private final WorkoutSetRepository workoutSetRepository;
     private final WorkoutRepository workoutRepository;
     private final ExerciseRepository exerciseRepository;
+    private final WorkoutSetMapper workoutSetMapper;
+
+    @Transactional(readOnly = true)
+    public List<WorkoutSetDto> findAll() {
+        return workoutSetMapper.toDtoList(workoutSetRepository.findAll());
+    }
+
+    @Transactional(readOnly = true)
+    public WorkoutSetDto findById(Long id) {
+        return workoutSetRepository.findById(id)
+            .map(workoutSetMapper::toDto)
+            .orElseThrow(() -> new RuntimeException("Set not found"));
+    }
 
     @Transactional
     public WorkoutSetDto create(WorkoutSetDto dto) {
@@ -36,22 +49,29 @@ public class WorkoutSetService {
             .exercise(exercise)
             .build();
 
-        return mapToDto(workoutSetRepository.save(workoutSet));
+        return workoutSetMapper.toDto(workoutSetRepository.save(workoutSet));
     }
 
-    public List<WorkoutSetDto> getByWorkout(Long workoutId) {
-        return workoutSetRepository.findByWorkoutId(workoutId).stream()
-            .map(this::mapToDto)
-            .collect(Collectors.toList());
+    @Transactional
+    public WorkoutSetDto update(Long id, WorkoutSetDto dto) {
+        WorkoutSet existingSet = workoutSetRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Set not found"));
+
+        existingSet.setWeight(dto.getWeight());
+        existingSet.setReps(dto.getReps());
+
+        // Если нужно сменить упражнение в подходе
+        if (dto.getExerciseId() != null && !dto.getExerciseId().equals(existingSet.getExercise().getId())) {
+            Exercise newExercise = exerciseRepository.findById(dto.getExerciseId())
+                .orElseThrow(() -> new RuntimeException("Exercise not found"));
+            existingSet.setExercise(newExercise);
+        }
+
+        return workoutSetMapper.toDto(workoutSetRepository.save(existingSet));
     }
 
-    private WorkoutSetDto mapToDto(WorkoutSet workoutSet) {
-        return WorkoutSetDto.builder()
-            .id(workoutSet.getId())
-            .weight(workoutSet.getWeight())
-            .reps(workoutSet.getReps())
-            .workoutId(workoutSet.getWorkout().getId())
-            .exerciseId(workoutSet.getExercise().getId())
-            .build();
+    @Transactional
+    public void delete(Long id) {
+        workoutSetRepository.deleteById(id);
     }
 }
