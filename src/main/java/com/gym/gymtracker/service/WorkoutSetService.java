@@ -60,7 +60,14 @@ public class WorkoutSetService {
         existingSet.setWeight(dto.getWeight());
         existingSet.setReps(dto.getReps());
 
-        // Если нужно сменить упражнение в подходе
+        // 1. Добавляем обновление тренировки (Workout)
+        if (dto.getWorkoutId() != null && !dto.getWorkoutId().equals(existingSet.getWorkout().getId())) {
+            Workout newWorkout = workoutRepository.findById(dto.getWorkoutId())
+                .orElseThrow(() -> new RuntimeException("Workout not found"));
+            existingSet.setWorkout(newWorkout);
+        }
+
+        // 2. Обновление упражнения (Exercise) - уже должно быть, но проверь
         if (dto.getExerciseId() != null && !dto.getExerciseId().equals(existingSet.getExercise().getId())) {
             Exercise newExercise = exerciseRepository.findById(dto.getExerciseId())
                 .orElseThrow(() -> new RuntimeException("Exercise not found"));

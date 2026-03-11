@@ -5,12 +5,16 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
-@Builder // <--- Вот эта аннотация создает метод .builder()
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class UserDto {
     private Long id;
     private String username;
     private String email;
+    // Добавляем это поле:
+    private List<WorkoutDto> workouts;
 }
