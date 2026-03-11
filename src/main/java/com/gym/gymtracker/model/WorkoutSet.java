@@ -20,14 +20,14 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@Builder // Именно эта аннотация создает WorkoutSetBuilder с методом .reps()
 public class WorkoutSet {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     private Double weight;
-    private Integer repetitions;
+    private Integer reps; // Проверь, что тут не repetitions или что-то другое
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "workout_id")

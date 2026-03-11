@@ -1,6 +1,7 @@
 package com.gym.gymtracker.service;
 
 import com.gym.gymtracker.dto.UserDto;
+import com.gym.gymtracker.mapper.UserMapper;
 import com.gym.gymtracker.model.User;
 import com.gym.gymtracker.model.Workout;
 import com.gym.gymtracker.repository.UserRepository;
@@ -9,96 +10,89 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class UserService {
+
     private final UserRepository userRepository;
+    private final UserMapper userMapper;
 
-    private UserDto convertToDto(User user) {
-        UserDto dto = new UserDto();
-        dto.setId(user.getId());
-        dto.setUsername(user.getUsername());
-        dto.setEmail(user.getEmail());
-        return dto;
-    }
 
-    // CREATE
-    public UserDto create(UserDto dto) {
-        User user = User.builder()
-            .username(dto.getUsername())
-            .email(dto.getEmail())
-            .build();
-        return convertToDto(userRepository.save(user));
-    }
-
-    // READ ALL
+    @Transactional(readOnly = true)
     public List<UserDto> findAll() {
         return userRepository.findAll().stream()
-            .map(this::convertToDto)
+            .map(userMapper::toDto)
             .collect(Collectors.toList());
     }
 
-    // READ ONE
-    public UserDto findById(Long id) {
-        return userRepository.findById(id)
-            .map(this::convertToDto)
-            .orElseThrow(() -> new RuntimeException("User not found"));
+    @Transactional(readOnly = true)
+    public UserDto findByUsername(String username) {
+        User user = userRepository.findByUsername(username);
+        if (user == null) {
+            throw new RuntimeException("User not found with username: " + username);
+        }
+        return userMapper.toDto(user);
     }
 
-    // UPDATE
+    @Transactional(readOnly = true)
+    public UserDto findById(Long id) {
+        return userRepository.findById(id)
+            .map(userMapper::toDto)
+            .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
+    }
+
     @Transactional
-    public UserDto update(Long id, UserDto dto) {
-        User user = userRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("User not found"));
-        user.setUsername(dto.getUsername());
-        user.setEmail(dto.getEmail());
-        // save() вызывать не обязательно из-за @Transactional, но для ясности можно
-        return convertToDto(userRepository.save(user));
+    public UserDto create(UserDto dto) {
+        User user = userMapper.toEntity(dto);
+        User savedUser = userRepository.save(user);
+        return userMapper.toDto(savedUser);
     }
 
     @Transactional
     public UserDto createWithFirstWorkout(UserDto dto, boolean makeError) {
-        // 1. Создаем юзера
-        User user = User.builder()
-            .username(dto.getUsername())
-            .email(dto.getEmail())
-            .workouts(new ArrayList<>())
-            .build();
 
-        // 2. Создаем тренировку и СРАЗУ привязываем к юзеру
+        User user = userMapper.toEntity(dto);
+
         Workout firstWorkout = Workout.builder()
-            .name("First Training")
-            .workoutDate(LocalDateTime.now()) // Обязательно, если поле в БД NOT NULL
+            .name("Первая тренировка")
+            .workoutDate(LocalDateTime.now())
             .user(user)
             .build();
 
-        // Добавляем в список (Cascade сработает)
         user.getWorkouts().add(firstWorkout);
 
-        // Сохраняем (одного save(user) достаточно из-за CascadeType.ALL)
         User savedUser = userRepository.save(user);
 
         if (makeError) {
-            throw new RuntimeException("Демонстрация отката транзакции");
+            throw new RuntimeException("Ошибка: транзакция откатывается, данные не будут сохранены в БД");
         }
 
-        return convertToDto(savedUser);
+        return userMapper.toDto(savedUser);
     }
 
-    // DELETE
+    @Transactional
     public void delete(Long id) {
         userRepository.deleteById(id);
     }
 
-    public UserDto findByUsername(String username) {
-        User user = userRepository.findByUsername(username);
-        if (user == null) {
-            throw new RuntimeException("User not found");
-        }
-        return convertToDto(user);
+    @Transactional
+    public UserDto update(Long id, UserDto dto) {
+        // 1. Ищем существующего юзера
+        User existingUser = userRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
+
+        // 2. Обновляем поля (кроме ID)
+        existingUser.setUsername(dto.getUsername());
+        existingUser.setEmail(dto.getEmail());
+
+        // 3. Сохраняем. В @Transactional методе вызов save() не всегда обязателен,
+        // но это хороший тон для ясности кода.
+        User updatedUser = userRepository.save(existingUser);
+
+        // 4. Возвращаем обновленный DTO
+        return userMapper.toDto(updatedUser);
     }
 }

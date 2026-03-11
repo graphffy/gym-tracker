@@ -6,11 +6,10 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
-@Builder // <--- Вот эта аннотация создает метод .builder()
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UserDto {
+public class CategoryDto {
     private Long id;
-    private String username;
-    private String email;
+    private String name;
 }
