@@ -5,6 +5,7 @@ import com.gym.gymtracker.mapper.UserMapper;
 import com.gym.gymtracker.model.User;
 import com.gym.gymtracker.model.Workout;
 import com.gym.gymtracker.repository.UserRepository;
+import com.gym.gymtracker.repository.WorkoutRepository; // Импорт добавлен
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +19,7 @@ import java.util.stream.Collectors;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final WorkoutRepository workoutRepository; // ТЕПЕРЬ ОШИБКИ НЕ БУДЕТ
     private final UserMapper userMapper;
 
 
@@ -51,9 +53,33 @@ public class UserService {
         return userMapper.toDto(savedUser);
     }
 
+    // Тот самый метод для демонстрации грязного сохранения
+    @Transactional // <--- Раскомментируй ПОТОМ, чтобы показать откат (Rollback)
+    public UserDto createWithDirtyTest(UserDto dto, boolean throwError) {
+        // 1. Сохраняем пользователя (Первое действие)
+        User user = userMapper.toEntity(dto);
+        User savedUser = userRepository.save(user);
+        System.out.println(">>> Шаг 1: Пользователь сохранен в БД с ID: " + savedUser.getId());
+
+        // 2. Искусственная ошибка
+        if (throwError) {
+            System.out.println(">>> ШАГ 2: Имитация сбоя...");
+            throw new RuntimeException("Сбой после сохранения юзера, но до сохранения тренировки!");
+        }
+
+        // 3. Сохраняем тренировку (Второе действие - до него не дойдем при ошибке)
+        // Если @Transactional нет, юзер из шага 1 ОСТАНЕТСЯ в базе.
+        Workout workout = Workout.builder()
+            .name("Приветственная тренировка")
+            .user(savedUser)
+            .build();
+        workoutRepository.save(workout);
+
+        return userMapper.toDto(savedUser);
+    }
+
     @Transactional
     public UserDto createWithFirstWorkout(UserDto dto, boolean makeError) {
-
         User user = userMapper.toEntity(dto);
 
         Workout firstWorkout = Workout.builder()
@@ -80,19 +106,13 @@ public class UserService {
 
     @Transactional
     public UserDto update(Long id, UserDto dto) {
-        // 1. Ищем существующего юзера
         User existingUser = userRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
 
-        // 2. Обновляем поля (кроме ID)
         existingUser.setUsername(dto.getUsername());
         existingUser.setEmail(dto.getEmail());
 
-        // 3. Сохраняем. В @Transactional методе вызов save() не всегда обязателен,
-        // но это хороший тон для ясности кода.
         User updatedUser = userRepository.save(existingUser);
-
-        // 4. Возвращаем обновленный DTO
         return userMapper.toDto(updatedUser);
     }
 }

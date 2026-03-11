@@ -42,10 +42,8 @@ public class UserController {
 
     // Тот самый тестовый метод для защиты (Транзакции)
     @PostMapping("/transaction-test")
-    public UserDto testTransaction(
-        @RequestBody UserDto dto,
-        @RequestParam boolean error) {
-        return userService.createWithFirstWorkout(dto, error);
+    public UserDto transactionTest(@RequestBody UserDto dto, @RequestParam boolean error) {
+        return userService.createWithDirtyTest(dto, error);
     }
 
     // Удаление
