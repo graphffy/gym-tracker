@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.data.domain.Page;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
@@ -30,6 +32,26 @@ public class WorkoutSetController {
     public WorkoutSetDto getById(@PathVariable Long id) {
         return workoutSetService.findById(id);
     }
+    @GetMapping("/search/jpql")
+    public Page<WorkoutSetDto> searchByUserAndExerciseJpql(
+        @RequestParam(required = false) String username,
+        @RequestParam(required = false) String exerciseName,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "10") int size
+    ) {
+        return workoutSetService.searchByUserAndExerciseJpql(username, exerciseName, page, size);
+    }
+
+    @GetMapping("/search/native")
+    public Page<WorkoutSetDto> searchByUserAndExerciseNative(
+        @RequestParam(required = false) String username,
+        @RequestParam(required = false) String exerciseName,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "10") int size
+    ) {
+        return workoutSetService.searchByUserAndExerciseNative(username, exerciseName, page, size);
+    }
+
 
     @PostMapping
     public WorkoutSetDto create(@RequestBody WorkoutSetDto dto) {

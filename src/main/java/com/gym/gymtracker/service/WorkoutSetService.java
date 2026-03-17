@@ -9,10 +9,19 @@ import com.gym.gymtracker.repository.ExerciseRepository;
 import com.gym.gymtracker.repository.WorkoutRepository;
 import com.gym.gymtracker.repository.WorkoutSetRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -22,6 +31,7 @@ public class WorkoutSetService {
     private final WorkoutRepository workoutRepository;
     private final ExerciseRepository exerciseRepository;
     private final WorkoutSetMapper workoutSetMapper;
+    private final Map<WorkoutSetSearchCacheKey, Page<WorkoutSetDto>> workoutSetSearchIndex = new HashMap<>();
 
     @Transactional(readOnly = true)
     public List<WorkoutSetDto> findAll() {
@@ -49,7 +59,10 @@ public class WorkoutSetService {
             .exercise(exercise)
             .build();
 
-        return workoutSetMapper.toDto(workoutSetRepository.save(workoutSet));
+        WorkoutSetDto created = workoutSetMapper.toDto(workoutSetRepository.save(workoutSet));
+        invalidateWorkoutSetSearchIndex();
+        return created;
+
     }
 
     @Transactional
@@ -74,11 +87,96 @@ public class WorkoutSetService {
             existingSet.setExercise(newExercise);
         }
 
-        return workoutSetMapper.toDto(workoutSetRepository.save(existingSet));
+        WorkoutSetDto updated = workoutSetMapper.toDto(workoutSetRepository.save(existingSet));
+        invalidateWorkoutSetSearchIndex();
+        return updated;
+
     }
 
     @Transactional
     public void delete(Long id) {
         workoutSetRepository.deleteById(id);
+        invalidateWorkoutSetSearchIndex();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<WorkoutSetDto> searchByUserAndExerciseJpql(String username, String exerciseName, int page, int size) {
+        WorkoutSetSearchCacheKey key = new WorkoutSetSearchCacheKey(username, exerciseName, page, size, false);
+        if (workoutSetSearchIndex.containsKey(key)) {
+            return workoutSetSearchIndex.get(key);
+        }
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").ascending());
+        Page<WorkoutSet> pageResult =
+            workoutSetRepository.searchByUserAndExerciseJpql(username, exerciseName, pageable);
+        Page<WorkoutSetDto> dtoPage = mapToDtoPage(pageResult, pageable);
+        workoutSetSearchIndex.put(key, dtoPage);
+        return dtoPage;
+    }
+
+    @Transactional(readOnly = true)
+    public Page<WorkoutSetDto> searchByUserAndExerciseNative(String username, String exerciseName, int page, int size) {
+        WorkoutSetSearchCacheKey key = new WorkoutSetSearchCacheKey(username, exerciseName, page, size, true);
+        if (workoutSetSearchIndex.containsKey(key)) {
+            return workoutSetSearchIndex.get(key);
+        }
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").ascending());
+        Page<WorkoutSet> pageResult =
+            workoutSetRepository.searchByUserAndExerciseNative(username, exerciseName, pageable);
+        Page<WorkoutSetDto> dtoPage = mapToDtoPage(pageResult, pageable);
+        workoutSetSearchIndex.put(key, dtoPage);
+        return dtoPage;
+    }
+
+    private Page<WorkoutSetDto> mapToDtoPage(Page<WorkoutSet> pageResult, Pageable pageable) {
+        List<WorkoutSetDto> content = pageResult.getContent()
+            .stream()
+            .map(workoutSetMapper::toDto)
+            .collect(Collectors.toList());
+        return new PageImpl<>(content, pageable, pageResult.getTotalElements());
+    }
+
+    private void invalidateWorkoutSetSearchIndex() {
+        workoutSetSearchIndex.clear();
+    }
+
+    private static final class WorkoutSetSearchCacheKey {
+        private final String username;
+        private final String exerciseName;
+        private final int page;
+        private final int size;
+        private final boolean nativeQuery;
+
+        private WorkoutSetSearchCacheKey(String username, String exerciseName, int page, int size,
+                                         boolean nativeQuery) {
+            this.username = username;
+            this.exerciseName = exerciseName;
+            this.page = page;
+            this.size = size;
+            this.nativeQuery = nativeQuery;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null || getClass() != obj.getClass()) {
+                return false;
+            }
+            WorkoutSetSearchCacheKey that = (WorkoutSetSearchCacheKey) obj;
+            return page == that.page
+                && size == that.size
+                && nativeQuery == that.nativeQuery
+                && Objects.equals(username, that.username)
+                && Objects.equals(exerciseName, that.exerciseName);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(username, exerciseName, page, size, nativeQuery);
+        }
+
     }
 }
