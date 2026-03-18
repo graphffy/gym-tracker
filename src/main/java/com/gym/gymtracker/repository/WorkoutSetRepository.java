@@ -5,9 +5,9 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-
 import java.util.List;
 
 public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
@@ -57,5 +57,4 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
         @Param("exerciseName") String exerciseName,
         Pageable pageable
     );
-
 }

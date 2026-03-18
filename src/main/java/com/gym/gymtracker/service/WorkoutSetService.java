@@ -9,6 +9,8 @@ import com.gym.gymtracker.repository.ExerciseRepository;
 import com.gym.gymtracker.repository.WorkoutRepository;
 import com.gym.gymtracker.repository.WorkoutSetRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -17,21 +19,24 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class WorkoutSetService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(WorkoutSetService.class);
+
     private final WorkoutSetRepository workoutSetRepository;
     private final WorkoutRepository workoutRepository;
     private final ExerciseRepository exerciseRepository;
     private final WorkoutSetMapper workoutSetMapper;
-    private final Map<WorkoutSetSearchCacheKey, Page<WorkoutSetDto>> workoutSetSearchIndex = new HashMap<>();
+    private final ConcurrentMap<WorkoutSetSearchCacheKey, Page<WorkoutSetDto>> workoutSetSearchIndex =
+        new ConcurrentHashMap<>();
 
     @Transactional(readOnly = true)
     public List<WorkoutSetDto> findAll() {
@@ -62,7 +67,6 @@ public class WorkoutSetService {
         WorkoutSetDto created = workoutSetMapper.toDto(workoutSetRepository.save(workoutSet));
         invalidateWorkoutSetSearchIndex();
         return created;
-
     }
 
     @Transactional
@@ -90,7 +94,6 @@ public class WorkoutSetService {
         WorkoutSetDto updated = workoutSetMapper.toDto(workoutSetRepository.save(existingSet));
         invalidateWorkoutSetSearchIndex();
         return updated;
-
     }
 
     @Transactional
@@ -102,30 +105,46 @@ public class WorkoutSetService {
     @Transactional(readOnly = true)
     public Page<WorkoutSetDto> searchByUserAndExerciseJpql(String username, String exerciseName, int page, int size) {
         WorkoutSetSearchCacheKey key = new WorkoutSetSearchCacheKey(username, exerciseName, page, size, false);
-        if (workoutSetSearchIndex.containsKey(key)) {
-            return workoutSetSearchIndex.get(key);
+        Page<WorkoutSetDto> cachedResult = workoutSetSearchIndex.get(key);
+        if (cachedResult != null) {
+            LOGGER.debug("WorkoutSet search cache HIT (JPQL): {}", key);
+            return cachedResult;
         }
+        LOGGER.debug("WorkoutSet search cache MISS (JPQL): {}", key);
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").ascending());
         Page<WorkoutSet> pageResult =
             workoutSetRepository.searchByUserAndExerciseJpql(username, exerciseName, pageable);
         Page<WorkoutSetDto> dtoPage = mapToDtoPage(pageResult, pageable);
-        workoutSetSearchIndex.put(key, dtoPage);
+        Page<WorkoutSetDto> existingResult = workoutSetSearchIndex.putIfAbsent(key, dtoPage);
+        if (existingResult != null) {
+            LOGGER.debug("WorkoutSet search cache filled concurrently (JPQL), using existing value: {}", key);
+            return existingResult;
+        }
+
         return dtoPage;
     }
 
     @Transactional(readOnly = true)
     public Page<WorkoutSetDto> searchByUserAndExerciseNative(String username, String exerciseName, int page, int size) {
         WorkoutSetSearchCacheKey key = new WorkoutSetSearchCacheKey(username, exerciseName, page, size, true);
-        if (workoutSetSearchIndex.containsKey(key)) {
-            return workoutSetSearchIndex.get(key);
+        Page<WorkoutSetDto> cachedResult = workoutSetSearchIndex.get(key);
+        if (cachedResult != null) {
+            LOGGER.debug("WorkoutSet search cache HIT (NATIVE): {}", key);
+            return cachedResult;
         }
+        LOGGER.debug("WorkoutSet search cache MISS (NATIVE): {}", key);
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").ascending());
         Page<WorkoutSet> pageResult =
             workoutSetRepository.searchByUserAndExerciseNative(username, exerciseName, pageable);
         Page<WorkoutSetDto> dtoPage = mapToDtoPage(pageResult, pageable);
-        workoutSetSearchIndex.put(key, dtoPage);
+        Page<WorkoutSetDto> existingResult = workoutSetSearchIndex.putIfAbsent(key, dtoPage);
+        if (existingResult != null) {
+            LOGGER.debug("WorkoutSet search cache filled concurrently (NATIVE), using existing value: {}", key);
+            return existingResult;
+        }
+
         return dtoPage;
     }
 
@@ -138,6 +157,7 @@ public class WorkoutSetService {
     }
 
     private void invalidateWorkoutSetSearchIndex() {
+        LOGGER.debug("WorkoutSet search cache invalidated. Entries before clear: {}", workoutSetSearchIndex.size());
         workoutSetSearchIndex.clear();
     }
 
@@ -178,5 +198,15 @@ public class WorkoutSetService {
             return Objects.hash(username, exerciseName, page, size, nativeQuery);
         }
 
+        @Override
+        public String toString() {
+            return "WorkoutSetSearchCacheKey{"
+                + "username='" + username + '\''
+                + ", exerciseName='" + exerciseName + '\''
+                + ", page=" + page
+                + ", size=" + size
+                + ", nativeQuery=" + nativeQuery
+                + '}';
+        }
     }
 }
